@@ -35,3 +35,5 @@ avalon-*.tar
 npm-debug.log
 /assets/node_modules/
 
+# Other
+inspo.txt

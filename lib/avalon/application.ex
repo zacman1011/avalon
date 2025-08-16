@@ -11,8 +11,8 @@ defmodule Avalon.Application do
       AvalonWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:avalon, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Avalon.PubSub},
-      # Start a worker by calling: Avalon.Worker.start_link(arg)
-      # {Avalon.Worker, arg},
+      Avalon.Registry,
+      Avalon.GameSupervisor,
       # Start to serve requests, typically the last entry
       AvalonWeb.Endpoint
     ]

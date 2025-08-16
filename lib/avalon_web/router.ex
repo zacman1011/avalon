@@ -17,7 +17,8 @@ defmodule AvalonWeb.Router do
   scope "/", AvalonWeb do
     pipe_through :browser
 
-    get "/", PageController, :home
+    live "/", HomeLive
+    live "/game/:game_id", GameLive
   end
 
   # Other scopes may use custom stacks.
