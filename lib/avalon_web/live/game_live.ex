@@ -9,6 +9,7 @@ defmodule AvalonWeb.GameLive do
       :timer.send_interval(1000, self(), :tick)
     end
 
+    # Initialize socket - cookies will be loaded via JavaScript
     socket = socket
     |> assign(:game_id, game_id)
     |> assign(:player_id, nil)
@@ -30,6 +31,7 @@ defmodule AvalonWeb.GameLive do
         |> assign(:player_id, player_id)
         |> assign(:player_name, name)
         |> assign(:error, nil)
+        |> set_session_cookies(socket.assigns.game_id, player_id, name)
 
         {:noreply, socket}
 
@@ -82,6 +84,50 @@ defmodule AvalonWeb.GameLive do
     {:noreply, socket}
   end
 
+  def handle_event("leave_game", _, socket) do
+    # Clear session cookies and redirect to home
+    socket = clear_session_cookies(socket)
+    {:noreply, push_navigate(socket, to: ~p"/")}
+  end
+
+  def handle_event("clear_session", _, socket) do
+    # Clear session cookies and refresh the page
+    socket = clear_session_cookies(socket)
+    {:noreply, push_navigate(socket, to: ~p"/game/#{socket.assigns.game_id}")}
+  end
+
+  def handle_event("cookies_loaded", %{"game_id" => game_id, "player_id" => player_id, "player_name" => player_name}, socket) do
+    # Handle cookies loaded from JavaScript
+    if game_id == socket.assigns.game_id do
+      case Game.get_game_state(game_id, player_id) do
+        {:ok, game_state} ->
+          # Mark player as reconnected
+          Game.reconnect_player(game_id, player_id)
+
+          # Clear reconnected flags after 30 seconds
+          Process.send_after(self(), :clear_reconnected_flags, 30_000)
+
+          socket = socket
+          |> assign(:player_id, player_id)
+          |> assign(:player_name, player_name)
+          |> assign(:game_state, game_state)
+          |> assign(:selected_team, [])
+          |> assign(:error, nil)
+          |> put_flash(:info, "Welcome back, #{player_name}!")
+
+          {:noreply, socket}
+        {:error, _} ->
+          # Player not found, clear cookies
+          socket = clear_session_cookies(socket)
+          {:noreply, assign(socket, :error, "Your previous session has expired. Please join again.")}
+      end
+    else
+      # Different game, clear cookies
+      socket = clear_session_cookies(socket)
+      {:noreply, assign(socket, :error, "You have a session in a different game. Please join this game with a new name.")}
+    end
+  end
+
   def handle_info(:tick, socket) do
     # Update current time for countdown calculations
     socket = assign(socket, :current_time, System.monotonic_time(:millisecond))
@@ -89,7 +135,19 @@ defmodule AvalonWeb.GameLive do
   end
 
   def handle_info({:game_update, game_state}, socket) do
+    # Clear cookies if game is over
+    socket = if game_state.phase == :game_over do
+      clear_session_cookies(socket)
+    else
+      socket
+    end
+
     {:noreply, assign(socket, :game_state, game_state)}
+  end
+
+  def handle_info(:clear_reconnected_flags, socket) do
+    Game.clear_reconnected_flags(socket.assigns.game_id)
+    {:noreply, socket}
   end
 
   def render(assigns) do
@@ -98,6 +156,10 @@ defmodule AvalonWeb.GameLive do
     <div class="avalon-game">
       <%= if @player_id do %>
         <div class="game-interface">
+          <div class="game-header">
+            <h2>Game: <%= @game_id %></h2>
+            <button phx-click="leave_game" class="leave-game-btn">Leave Game</button>
+          </div>
           <%= render_game_phase(assigns) %>
         </div>
       <% else %>
@@ -107,6 +169,7 @@ defmodule AvalonWeb.GameLive do
             <input type="text" name="player_name" placeholder="Enter your name" required />
             <button type="submit">Join Game</button>
           </form>
+          <button phx-click="clear_session" class="clear-session-btn">Join as Different Player</button>
           <%= if @error do %>
             <div class="error"><%= @error %></div>
           <% end %>
@@ -130,6 +193,9 @@ defmodule AvalonWeb.GameLive do
         <%= for player_id <- @game_state.player_order do %>
           <div class="player">
             <%= @game_state.players[player_id].name %>
+            <%= if @game_state.players[player_id].reconnected do %>
+              <span class="reconnected-badge">Reconnected</span>
+            <% end %>
           </div>
         <% end %>
       </div>
@@ -521,7 +587,70 @@ defmodule AvalonWeb.GameLive do
         border-radius: 5px;
         margin: 10px 0;
       }
+
+      .game-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #ddd;
+      }
+
+      .leave-game-btn {
+        background: #ff6b6b;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+
+      .leave-game-btn:hover {
+        background: #ff5252;
+      }
+
+      .clear-session-btn {
+        background: #6c757d;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 14px;
+        margin-top: 10px;
+        width: 100%;
+      }
+
+      .clear-session-btn:hover {
+        background: #5a6268;
+      }
+
+      .reconnected-badge {
+        background: #28a745;
+        color: white;
+        font-size: 12px;
+        padding: 2px 6px;
+        border-radius: 3px;
+        margin-left: 8px;
+      }
     </style>
     """
+  end
+
+  # Cookie management functions
+  defp set_session_cookies(socket, game_id, player_id, player_name) do
+    socket
+    |> push_event("set_cookies", %{
+      game_id: game_id,
+      player_id: player_id,
+      player_name: player_name
+    })
+  end
+
+  defp clear_session_cookies(socket) do
+    socket
+    |> push_event("clear_cookies", %{})
   end
 end

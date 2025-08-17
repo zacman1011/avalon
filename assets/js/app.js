@@ -25,11 +25,50 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/avalon"
 import topbar from "../vendor/topbar"
 
+// Cookie management hooks
+const CookieHooks = {
+  mounted() {
+    // Handle setting cookies
+    this.handleEvent("set_cookies", ({game_id, player_id, player_name}) => {
+      document.cookie = `avalon_game_id=${game_id}; max-age=${24 * 60 * 60}; path=/; SameSite=Lax`
+      document.cookie = `avalon_player_id=${player_id}; max-age=${24 * 60 * 60}; path=/; SameSite=Lax`
+      document.cookie = `avalon_player_name=${player_name}; max-age=${24 * 60 * 60}; path=/; SameSite=Lax`
+    })
+
+    // Handle clearing cookies
+    this.handleEvent("clear_cookies", () => {
+      document.cookie = "avalon_game_id=; max-age=0; path=/"
+      document.cookie = "avalon_player_id=; max-age=0; path=/"
+      document.cookie = "avalon_player_name=; max-age=0; path=/"
+    })
+
+    // Send existing cookies to the server on mount
+    const gameId = this.getCookie("avalon_game_id")
+    const playerId = this.getCookie("avalon_player_id")
+    const playerName = this.getCookie("avalon_player_name")
+    
+    if (gameId && playerId && playerName) {
+      this.pushEvent("cookies_loaded", {
+        game_id: gameId,
+        player_id: playerId,
+        player_name: playerName
+      })
+    }
+  },
+
+  getCookie(name) {
+    const value = `; ${document.cookie}`
+    const parts = value.split(`; ${name}=`)
+    if (parts.length === 2) return parts.pop().split(';').shift()
+    return null
+  }
+}
+
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks},
+  hooks: {...colocatedHooks, CookieHooks},
 })
 
 // Show progress bar on live navigation and form submits

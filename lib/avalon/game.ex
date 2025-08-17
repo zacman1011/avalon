@@ -61,6 +61,14 @@ defmodule Avalon.Game do
     GenServer.call(via_tuple(game_id), {:get_state, player_id})
   end
 
+  def reconnect_player(game_id, player_id) do
+    GenServer.call(via_tuple(game_id), {:reconnect_player, player_id})
+  end
+
+  def clear_reconnected_flags(game_id) do
+    GenServer.call(via_tuple(game_id), :clear_reconnected_flags)
+  end
+
   defp via_tuple(game_id) do
     {:via, Registry, {Avalon.Registry, game_id}}
   end
@@ -179,12 +187,34 @@ defmodule Avalon.Game do
   end
 
   def handle_call({:get_state, player_id}, _from, state) do
-    player_view = Avalon.GameLogic.get_player_view(state, player_id)
-    |> Map.merge(%{
-      time_remaining: get_time_remaining(state),
-      phase_start_time: state.phase_start_time
-    })
-    {:reply, player_view, state}
+    if Map.has_key?(state.players, player_id) do
+      player_view = Avalon.GameLogic.get_player_view(state, player_id)
+      |> Map.merge(%{
+        time_remaining: get_time_remaining(state),
+        phase_start_time: state.phase_start_time
+      })
+      {:reply, {:ok, player_view}, state}
+    else
+      {:reply, {:error, "Player not found"}, state}
+    end
+  end
+
+  def handle_call({:reconnect_player, player_id}, _from, state) do
+    case Avalon.GameLogic.mark_player_reconnected(state, player_id) do
+      {:ok, new_state} ->
+        broadcast_game_update(new_state)
+        {:reply, :ok, new_state}
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call(:clear_reconnected_flags, _from, state) do
+    case Avalon.GameLogic.clear_reconnected_flags(state) do
+      {:ok, new_state} ->
+        broadcast_game_update(new_state)
+        {:reply, :ok, new_state}
+    end
   end
 
   def handle_info(:phase_timeout, state) do

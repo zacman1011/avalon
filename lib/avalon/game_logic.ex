@@ -49,7 +49,7 @@ defmodule Avalon.GameLogic do
       {:error, "Game is full"}
     else
       player_id = :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
-      player = %{id: player_id, name: player_name}
+      player = %{id: player_id, name: player_name, reconnected: false}
 
       new_state = %{state |
         players: Map.put(state.players, player_id, player),
@@ -58,6 +58,38 @@ defmodule Avalon.GameLogic do
 
       {:ok, player_id, new_state}
     end
+  end
+
+  @doc """
+  Marks a player as reconnected. Returns {:ok, new_state} or {:error, reason}.
+  """
+  @spec mark_player_reconnected(GameState.t(), String.t()) :: {:ok, GameState.t()} | {:error, String.t()}
+  def mark_player_reconnected(state, player_id) do
+    if Map.has_key?(state.players, player_id) do
+      player = state.players[player_id]
+      updated_player = %{player | reconnected: true}
+
+      new_state = %{state |
+        players: Map.put(state.players, player_id, updated_player)
+      }
+
+      {:ok, new_state}
+    else
+      {:error, "Player not found"}
+    end
+  end
+
+  @doc """
+  Clears the reconnected flag for all players. Returns {:ok, new_state}.
+  """
+  @spec clear_reconnected_flags(GameState.t()) :: {:ok, GameState.t()}
+  def clear_reconnected_flags(state) do
+    updated_players = Map.new(state.players, fn {id, player} ->
+      {id, %{player | reconnected: false}}
+    end)
+
+    new_state = %{state | players: updated_players}
+    {:ok, new_state}
   end
 
   @doc """
