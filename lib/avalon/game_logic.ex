@@ -585,6 +585,7 @@ defmodule Avalon.GameLogic do
         used_targets: state.lady_of_the_lake.used_targets,
         pending_reveal: state.lady_of_the_lake.pending_reveal,
         can_see_reveal: state.phase == :lady_reveal and
+                       state.lady_of_the_lake.pending_reveal and
                        (state.lady_of_the_lake.pending_reveal.revealer == player_id or
                         state.lady_of_the_lake.pending_reveal.target == player_id)
       }

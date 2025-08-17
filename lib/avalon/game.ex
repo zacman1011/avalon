@@ -26,7 +26,7 @@ defmodule Avalon.Game do
 
   # Client API
   def start_link(game_id) do
-    GenServer.start_link(__MODULE__, %{}, name: via_tuple(game_id))
+    GenServer.start_link(__MODULE__, %{game_id: game_id}, name: via_tuple(game_id))
   end
 
   def join_game(game_id, player_name) do
@@ -74,7 +74,7 @@ defmodule Avalon.Game do
   end
 
   # Server Callbacks
-  def init(game_id) do
+  def init(%{game_id: game_id}) do
     state = %GameState{
       id: game_id,
       players: %{},
