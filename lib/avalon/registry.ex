@@ -3,7 +3,7 @@ defmodule Avalon.Registry do
   Registry for managing game processes.
   """
 
-  def start_link(opts) do
+  def start_link(_opts) do
     Registry.start_link(keys: :unique, name: __MODULE__)
   end
 
